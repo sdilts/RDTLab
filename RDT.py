@@ -132,12 +132,12 @@ class RDT:
                 self.network.udt_send(p.get_byte_S())
             else:
                 rec = Packet.from_byte_S(self.byte_buffer[0:length])
-                if rec.ack != p.seq_num and p.msg_S == 'nak':
+                if rec.msg_S == 'nak':
                     print("Is NAK. Resending")
                     print("Expected: " + str(p.seq_num))
                     print("Recieved: " + str(rec.ack))
                     self.network.udt_send(p.get_byte_S())
-                elif rec.msg_S == 'ack':
+                elif rec.msg_S == 'ack' and rec.ack == p.seq_num:
                     print("Recived ack: " + str(rec.ack))
                     print("Our seq: " + str(p.seq_num))
                     print("Packet sent sucessfully")
@@ -145,9 +145,19 @@ class RDT:
                     packetSent = True
                     # break;
                 else:
-                    print(rec.msg_S + "\n")
-                    # its a message? ignore it
-                    pass
+                    if rec.msg_S == 'ack' and rec.ack < p.seq_num:
+                        # ack for something we already established, ignore
+                        pass
+                    elif rec.seq_num < self.rec_num:
+                        # its a message? Re-send confirmation
+                        # resend the ack:
+                        print("Recieved dupe:")
+                        print(rec.msg_S + "\n")
+                        print("Resending ack " + str(rec.seq_num))
+                        answer = Packet(rec.seq_num, 'ack', rec.seq_num)
+                        self.network.udt_send(answer.get_byte_S())
+                    else:
+                        print("Don't know what to do.")
             self.byte_buffer = self.byte_buffer[length:]
 
 
@@ -170,7 +180,8 @@ class RDT:
             if Packet.corrupt(self.byte_buffer[0:length]):
                 # Do things for corrupt packet:
                 print("Recieve: Packet is corrupt")
-                anwser = Packet(cur_seq, 'nak',cur_seq-1)
+                answer = Packet(cur_seq, 'nak',-1)
+                self.network.udt_send(answer.get_byte_S())
             else:
                 p = Packet.from_byte_S(self.byte_buffer[0:length])
                 # check seq number:
@@ -179,7 +190,6 @@ class RDT:
                     print(p.ack)
                     # ignore the packet:
                     # continue
-                    pass
                 elif p.seq_num == self.rec_num:
                     # packet is correct!
                     # send ack:
@@ -189,10 +199,16 @@ class RDT:
                     ret_S = p.msg_S if (ret_S is None) else ret_S + p.msg_S
                     self.rec_num = self.rec_num + 1
                 else:
+                    if self.rec_num > p.seq_num:
+                        print("Recieved duplicate ack")
+                        # re-send ack:
+                        answer = Packet(p.seq_num, 'ack', p.seq_num)
+                        self.network.udt_send(answer.get_byte_S())
                     print("Sequence number is incorrect")
                     print("Expected: " + str(self.rec_num))
                     print("Recieved: " + str(p.seq_num))
             #remove the packet bytes from the buffer
+            print("Receive: Shortening buffer...")
             self.byte_buffer = self.byte_buffer[length:]
             #if this was the last packet, will return on the next iteration
 
