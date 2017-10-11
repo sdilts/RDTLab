@@ -2,7 +2,7 @@ import Network
 import argparse
 from time import sleep
 import hashlib
-
+import time
 
 class Packet:
     ## the number of bytes used to store packet length
@@ -240,10 +240,81 @@ class RDT:
 
 
     def rdt_3_0_send(self, msg_S):
-        pass
+        packetSent = False
+        p = Packet(self.seq_num, msg_S)
+        self.network.udt_send(p.get_byte_S())
+        currentTime = time.clock()
+        timeout = .001
+
+        while not packetSent:
+            # send the packet:
+            # Wait for an ack packet to make it back:
+            gotPack = False
+            while (not gotPack) and ((time.clock()-currentTime) < timeout):
+                byte_S = self.network.udt_receive()
+                self.byte_buffer += byte_S
+                #check if we have received enough bytes
+                if(len(self.byte_buffer) < Packet.length_S_length):
+                    continue
+                # extract length of packet
+                length = int(self.byte_buffer[:Packet.length_S_length])
+                if len(self.byte_buffer) >= length:
+                    gotPack = True
+            if not gotPack:
+                self.network.udt_send(p.get_byte_S())
+                currentTime = time.clock()
+                debug("timeout...!")
+                continue
+            debug("Got packet")
+            # check to make sure that the correct ack was given:
+            if Packet.corrupt(self.byte_buffer[0:length]):
+                # Do things for corrupt packet:
+                debug("Response is corrupt. Resending...")
+                self.send_packet(p.get_byte_S())
+            else:
+                rec = Packet.from_byte_S(self.byte_buffer[0:length])
+                if rec.msg_S == 'nak':
+                    debug("Is NAK. Resending")
+                    debug("Expected: " + str(p.seq_num))
+                    debug("Recieved: " + str(rec.ack))
+                    self.send_packet(p.get_byte_S())
+                elif rec.msg_S == 'ack' and rec.ack == p.seq_num:
+                    debug("Recived ack: " + str(rec.ack))
+                    debug("Our seq: " + str(p.seq_num))
+                    debug("Packet sent sucessfully")
+                    self.seq_num += 1
+                    packetSent = True
+                    # break;
+                else:
+                    if rec.msg_S == 'ack' and rec.ack < p.seq_num:
+                        debug("Send: Recieved dupe ack")
+                        # ack for something we already established, ignore
+                        pass
+                    elif rec.seq_num < self.rec_num:
+                        # its a message? Re-send confirmation
+                        # resend the ack:
+                        debug("Recieved dupe:")
+                        debug(rec.msg_S + "\n")
+                        debug("Resending ack " + str(rec.seq_num))
+                        answer = Packet(rec.seq_num, 'ack', rec.seq_num)
+                        self.send_packet(answer.get_byte_S())
+                        debug("Resending packet:")
+                        self.send_packet(p.get_byte_S())
+                    elif not rec.is_ack() and rec.seq_num == self.rec_num:
+                        debug("Next packet recieved. Packet must have been sent sucessfully")
+                        self.seq_num += 1
+                        packetSent = True
+                    else:
+                        debug("Don't know what to do.")
+                        debug(rec.msg_S)
+                        debug("Ack num: " + str(rec.ack))
+                        debug("Rec seq num: " + str(rec.seq_num))
+                        debug("OUr rec num: " + str(self.rec_num))
+                        debug("Our seq num: " + str(self.seq_num))
+            self.byte_buffer = self.byte_buffer[length:]
 
     def rdt_3_0_receive(self):
-        pass
+        self.rdt_2_1_receive()
 
 
 if __name__ == '__main__':
