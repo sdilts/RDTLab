@@ -109,10 +109,11 @@ class RDT:
 
     def rdt_2_1_send(self, msg_S):
         packetSent = False
+        p = Packet(self.seq_num, msg_S)
+        self.network.udt_send(p.get_byte_S())
+
         while not packetSent:
             # send the packet:
-            p = Packet(self.seq_num, msg_S)
-            self.network.udt_send(p.get_byte_S())
             # Wait for an ack packet to make it back:
             gotPack = False
             while not gotPack:
@@ -146,6 +147,7 @@ class RDT:
                     # break;
                 else:
                     if rec.msg_S == 'ack' and rec.ack < p.seq_num:
+                        print("Send: Recieved dupe ack")
                         # ack for something we already established, ignore
                         pass
                     elif rec.seq_num < self.rec_num:
@@ -156,8 +158,19 @@ class RDT:
                         print("Resending ack " + str(rec.seq_num))
                         answer = Packet(rec.seq_num, 'ack', rec.seq_num)
                         self.network.udt_send(answer.get_byte_S())
+                        print("Resending packet:")
+                        self.network.udt_send(p.get_byte_S())
+                    elif rec.seq_num > self.rec_num:
+                        print("Next packet recieved. Packet must have been sent sucessfully")
+                        self.seq_num += 1
+                        packetSent = True
                     else:
                         print("Don't know what to do.")
+                        print(rec.msg_S)
+                        print("Ack num: " + str(rec.ack))
+                        print("Rec seq num: " + str(rec.seq_num))
+                        print("OUr rec num: " + str(self.rec_num))
+                        print("Our seq num: " + str(self.seq_num))
             self.byte_buffer = self.byte_buffer[length:]
 
 
