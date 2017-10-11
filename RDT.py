@@ -314,7 +314,7 @@ class RDT:
             self.byte_buffer = self.byte_buffer[length:]
 
     def rdt_3_0_receive(self):
-        self.rdt_2_1_receive()
+        return self.rdt_2_1_receive()
 
 
 if __name__ == '__main__':
