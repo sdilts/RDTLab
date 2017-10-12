@@ -1,5 +1,5 @@
 import argparse
-import RDT
+import RDT_2_1 as RDT
 import time
 
 

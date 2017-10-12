@@ -3,7 +3,7 @@ import socket
 import threading
 from time import sleep
 import random
-import RDT
+import RDT_2_1 as RDT
 
 
 
