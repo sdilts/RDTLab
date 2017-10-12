@@ -1,8 +1,9 @@
-import Network
+import Network_2_1 as Network
 import argparse
 from time import sleep
 import hashlib
 import time
+import os
 
 class Packet:
     ## the number of bytes used to store packet length
@@ -115,9 +116,17 @@ class RDT:
     def send_packet(self, mssg):
         try:
             self.network.udt_send(mssg)
-        except ConnectionResetError:
+        except:
             debug("Connection must have been sent: Client is finished")
-            exit()
+            # becauase we are lazy
+            os._exit(0)
+
+    def recieve_packet(self):
+        try:
+            return self.network.udt_receive()
+        except:
+            debug("Packet must have been sent: Other is finished")
+            os._exit(0)
 
 
     def rdt_2_1_send(self, msg_S):
@@ -130,7 +139,7 @@ class RDT:
             # Wait for an ack packet to make it back:
             gotPack = False
             while not gotPack:
-                byte_S = self.network.udt_receive()
+                byte_S = self.recieve_packet()
                 self.byte_buffer += byte_S
                 #check if we have received enough bytes
                 if(len(self.byte_buffer) < Packet.length_S_length):
@@ -191,7 +200,7 @@ class RDT:
 
     def rdt_2_1_receive(self):
         ret_S = None
-        byte_S = self.network.udt_receive()
+        byte_S = self.recieve_packet()
         self.byte_buffer += byte_S
         cur_seq = self.rec_num
         #keep extracting packets - if reordered, could get more than one
@@ -207,7 +216,7 @@ class RDT:
                 # Do things for corrupt packet:
                 debug("Recieve: Packet is corrupt")
                 answer = Packet(cur_seq, 'nak',-1)
-                self.network.udt_send(answer.get_byte_S())
+                self.send_packet(answer.get_byte_S())
             else:
                 p = Packet.from_byte_S(self.byte_buffer[0:length])
                 # check seq number:
@@ -221,7 +230,7 @@ class RDT:
                     # send ack:
                     debug("Incrementing rec num")
                     answer = Packet(p.seq_num, 'ack', p.seq_num)
-                    self.network.udt_send(answer.get_byte_S())
+                    self.send_packet(answer.get_byte_S())
                     ret_S = p.msg_S if (ret_S is None) else ret_S + p.msg_S
                     self.rec_num = self.rec_num + 1
                 else:
@@ -229,7 +238,7 @@ class RDT:
                         debug("Recieved duplicate ack")
                         # re-send ack:
                         answer = Packet(p.seq_num, 'ack', p.seq_num)
-                        self.network.udt_send(answer.get_byte_S())
+                        self.send_packet(answer.get_byte_S())
                     debug("Sequence number is incorrect")
                     debug("Expected: " + str(self.rec_num))
                     debug("Recieved: " + str(p.seq_num))
@@ -251,7 +260,7 @@ class RDT:
             # Wait for an ack packet to make it back:
             gotPack = False
             while (not gotPack) and ((time.clock()-currentTime) < timeout):
-                byte_S = self.network.udt_receive()
+                byte_S = self.recieve_packet()
                 self.byte_buffer += byte_S
                 #check if we have received enough bytes
                 if(len(self.byte_buffer) < Packet.length_S_length):
